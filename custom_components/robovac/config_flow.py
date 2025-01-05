@@ -69,7 +69,7 @@ USER_SCHEMA = vol.Schema(
 
 
 def get_eufy_vacuums(self):
-    """Login to Eufy and get the vacuum details"""
+    """Login to Eufy and get the vacuum details."""
 
     eufy_session = EufyLogon(self["username"], self["password"])
     response = eufy_session.get_user_info()
@@ -87,79 +87,24 @@ def get_eufy_vacuums(self):
     )
 
     device_response = response.json()
-
-    response = eufy_session.get_user_settings(
-        user_response["user_info"]["request_host"],
-        user_response["user_info"]["id"],
-        user_response["access_token"],
-    )
-    settings_response = response.json()
-
-    self[CONF_CLIENT_ID] = user_response["user_info"]["id"]
-    if (
-        "tuya_home" in settings_response["setting"]["home_setting"]
-        and "tuya_region_code"
-        in settings_response["setting"]["home_setting"]["tuya_home"]
-    ):
-        self[CONF_REGION] = settings_response["setting"]["home_setting"]["tuya_home"][
-            "tuya_region_code"
-        ]
-        if user_response["user_info"]["phone_code"]:
-            self[CONF_COUNTRY_CODE] = user_response["user_info"]["phone_code"]
-        else:
-            self[CONF_COUNTRY_CODE] = get_phone_code_by_region(self[CONF_REGION])
-    elif user_response["user_info"]["phone_code"]:
-        self[CONF_REGION] = get_region_by_phone_code(
-            user_response["user_info"]["phone_code"]
-        )
-        self[CONF_COUNTRY_CODE] = user_response["user_info"]["phone_code"]
-    elif user_response["user_info"]["country"]:
-        self[CONF_REGION] = get_region_by_country_code(
-            user_response["user_info"]["country"]
-        )
-        self[CONF_COUNTRY_CODE] = get_phone_code_by_country_code(
-            user_response["user_info"]["country"]
-        )
-    else:
-        self[CONF_REGION] = "EU"
-        self[CONF_COUNTRY_CODE] = "44"
-
-    self[CONF_TIME_ZONE] = user_response["user_info"]["timezone"]
-
-    tuya_client = TuyaAPISession(
-        username="eh-" + self[CONF_CLIENT_ID],
-        region=self[CONF_REGION],
-        timezone=self[CONF_TIME_ZONE],
-        phone_code=self[CONF_COUNTRY_CODE],
-    )
-
-    items = device_response["items"]
+    items = device_response.get("items", [])
+    
     self[CONF_VACS] = {}
     for item in items:
         if item["device"]["product"]["appliance"] == "Cleaning":
-            try:
-                device = tuya_client.get_device(item["device"]["id"])
+            vac_details = {
+                CONF_ID: item["device"]["id"],
+                CONF_MODEL: item["device"]["product"]["product_code"],
+                CONF_NAME: item["device"]["alias_name"],
+                CONF_DESCRIPTION: item["device"]["name"],
+                CONF_MAC: item["device"]["wifi"]["mac"],
+                CONF_IP_ADDRESS: item["device"]["wifi"].get("lan_ip_addr", ""),
+                CONF_AUTODISCOVERY: True,
+                CONF_ACCESS_TOKEN: user_response["access_token"],
+            }
+            self[CONF_VACS][item["device"]["id"]] = vac_details
 
-                vac_details = {
-                    CONF_ID: item["device"]["id"],
-                    CONF_MODEL: item["device"]["product"]["product_code"],
-                    CONF_NAME: item["device"]["alias_name"],
-                    CONF_DESCRIPTION: item["device"]["name"],
-                    CONF_MAC: item["device"]["wifi"]["mac"],
-                    CONF_IP_ADDRESS: "",
-                    CONF_AUTODISCOVERY: True,
-                    CONF_ACCESS_TOKEN: device["localKey"],
-                }
-                self[CONF_VACS][item["device"]["id"]] = vac_details
-            except:
-                _LOGGER.debug(
-                    "Skipping vacuum {}: found on Eufy but not on Tuya. Eufy details:".format(
-                        item["device"]["id"]
-                    )
-                )
-                _LOGGER.debug(json.dumps(item["device"], indent=2))
-
-    return response
+    return device_response
 
 
 async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str, Any]:
