@@ -269,13 +269,10 @@ class RoboVacEntity(StateVacuumEntity):
         self.update_failures = 0
 
         try:
-            self.vacuum = RoboVac(
+            self.vacuum = EufyVacuum(
                 device_id=self.unique_id,
-                host=self.ip_address,
-                local_key=self.access_token,
-                timeout=TIMEOUT,
-                ping_interval=PING_RATE,
-                model_code=self.model_code[0:5],
+                access_token=self.access_token,
+                api_host=self.api_host,
                 update_entity_state=self.pushed_update_handler,
             )
         except ModelNotSupportedException:
@@ -451,3 +448,25 @@ class RoboVacEntity(StateVacuumEntity):
 
     async def async_will_remove_from_hass(self):
         await self.vacuum.async_disable()
+
+
+class EufyVacuum:
+    def __init__(self, device_id, access_token, api_host, update_entity_state):
+        self.device_id = device_id
+        self.access_token = access_token
+        self.api_host = api_host
+        self.update_entity_state = update_entity_state
+
+    def send_command(self, command):
+        url = f"{self.api_host}/v1/device/control"
+        headers = {
+            "token": self.access_token,
+            "Content-Type": "application/json",
+        }
+        data = {
+            "device_id": self.device_id,
+            "command": command,
+        }
+        response = requests.post(url, headers=headers, json=data)
+        response.raise_for_status()
+        return response.json()

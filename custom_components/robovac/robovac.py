@@ -1,6 +1,5 @@
 from enum import IntEnum
 from homeassistant.components.vacuum import VacuumEntityFeature
-from .tuyalocalapi import TuyaDevice
 
 
 class RoboVacEntityFeature(IntEnum):
@@ -108,7 +107,7 @@ class ModelNotSupportedException(Exception):
     """This model is not supported"""
 
 
-class RoboVac(TuyaDevice):
+class RoboVac():
     """"""
 
     def __init__(self, model_code, *args, **kwargs):
