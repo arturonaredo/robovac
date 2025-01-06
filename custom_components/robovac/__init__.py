@@ -12,84 +12,49 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 """The Eufy Robovac integration."""
 from __future__ import annotations
 import logging
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import EVENT_HOMEASSISTANT_STOP, Platform, CONF_IP_ADDRESS
+from homeassistant.const import EVENT_HOMEASSISTANT_STOP, Platform
 from homeassistant.core import HomeAssistant
 from .const import CONF_VACS, DOMAIN
-
-from .tuyalocaldiscovery import TuyaLocalDiscovery
 
 PLATFORMS = [Platform.VACUUM, Platform.SENSOR]
 _LOGGER = logging.getLogger(__name__)
 
-
-async def async_setup(hass, entry) -> bool:
-    hass.data.setdefault(DOMAIN, {CONF_VACS:{}})
-
-    async def update_device(device):
-        entry = async_get_config_entry_for_device(hass, device["gwId"])
-
-        if entry == None:
-            return
-
-        if not entry.state.recoverable:
-            return
-
-        hass_data = entry.data.copy()
-        if (
-            device["gwId"] in hass_data[CONF_VACS]
-            and device.get("ip") is not None
-            and hass_data[CONF_VACS][device["gwId"]].get("autodiscovery", True)
-        ):
-            if hass_data[CONF_VACS][device["gwId"]][CONF_IP_ADDRESS] != device["ip"]:
-                hass_data[CONF_VACS][device["gwId"]][CONF_IP_ADDRESS] = device["ip"]
-                hass.config_entries.async_update_entry(entry, data=hass_data)
-                await hass.config_entries.async_reload(entry.entry_id)
-                _LOGGER.debug(
-                    "Updated ip address of {} to {}".format(
-                        device["gwId"], device["ip"]
-                    )
-                )
-
-    tuyalocaldiscovery = TuyaLocalDiscovery(update_device)
-    try:
-        await tuyalocaldiscovery.start()
-        hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, tuyalocaldiscovery.close)
-    except Exception:
-        _LOGGER.exception("failed to set up discovery")
-
+async def async_setup(hass: HomeAssistant, entry) -> bool:
+    """Set up the Eufy Robovac integration."""
+    hass.data.setdefault(DOMAIN, {CONF_VACS: {}})
     return True
-
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Eufy Robovac from a config entry."""
+    # Listener para manejar cambios en la configuración
     entry.async_on_unload(entry.add_update_listener(update_listener))
 
+    # Cargar plataformas (VACUUM, SENSOR)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     return True
 
-
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
+    # Descargar plataformas (VACUUM, SENSOR)
     if unload_ok := await hass.config_entries.async_unload_platforms(
         entry, PLATFORMS
     ):
-        """Nothing"""
+        hass.data[DOMAIN][CONF_VACS].pop(entry.entry_id, None)
+
     return unload_ok
 
-
-async def update_listener(hass, entry):
+async def update_listener(hass: HomeAssistant, entry: ConfigEntry):
     """Handle options update."""
     await hass.config_entries.async_reload(entry.entry_id)
 
-
 def async_get_config_entry_for_device(hass, device_id):
+    """Retrieve the configuration entry for a given device."""
     current_entries = hass.config_entries.async_entries(DOMAIN)
     for entry in current_entries:
         if device_id in entry.data[CONF_VACS]:
